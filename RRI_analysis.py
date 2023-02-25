@@ -14,7 +14,7 @@ import matplotlib.patheffects as path_effects
 #############################################################################
 #                                  Main                                     #
 #############################################################################
-# time_index: 出力する時間軸(rriと同じデータ数)．rriの畳み込み和[msec]を1000で割って解析期間[sec]を算出
+# time_index: 出力するデータの時間軸．rriの畳み込み和[msec]を1000で割って解析期間[sec]を算出
 def rri_analysis(time_index, rri, outputdir, samplingrate):
     # 周波数解析の前にリサンプリング
     resampling_freq = 10
@@ -23,16 +23,16 @@ def rri_analysis(time_index, rri, outputdir, samplingrate):
     # wavelet変換を用いた時間周波数解析
     tm, LFHF_T, resampling_freq = wavelet(resampling_freq, resampling_rri, outputdir)
     
-    # 各時間幅ごとの算出
-    timewidths = [60, 300, 900] #時間幅（数パターン）
+    # 各時間幅ごとにHR,nHF,LF/HFを算出
+    timewidths = [60, 900] # 時間幅[sec]（細かい変動を見るための1minと，血糖値と同じ時間点数15minの2種）
     for timewidth in timewidths:
         HR = caluculateHR(tm, resampling_freq, resampling_rri, samplingrate, timewidth)
-        #fft(time_index, resampling_freq, resampling_rri, outputdir, timewidth)  #FFTを用いた時間周波数解析(timewidth=FFTの範囲)
+        #fft(time_index, resampling_freq, resampling_rri, outputdir, timewidth)  #FFTを用いた時間周波数解析
         time, nHF, LFHF = devide_LFHF(tm, LFHF_T, timewidth, resampling_freq)  #waveletで計算したLFHFを分割
         
         outputdf = pd.DataFrame(
-            data = [time,HR,nHF,LFHF],
-            index = ['time[min]','HR','nHF','LFHF'],
+            data = [time, HR, nHF, LFHF],
+            index = ['time[min]', 'HR', 'nHF', 'LFHF'],
         )
         pd.DataFrame(outputdf.T).to_csv(outputdir+"result_per"+str(int(timewidth/60))+"min.csv", index=False)
 
@@ -82,7 +82,7 @@ def fft(time_index, resampling_freq, resampling_rri, outputdir, timewidth):
     for width in range(int(time_index[-1]/timewidth)):
         target_rri = resampling_rri[timewidth*width*resampling_freq:timewidth*(width+1)*resampling_freq]
 
-        window = signal.hamming(timewidth*resampling_freq)  # ハミング窓関数
+        window = signal.hamming(timewidth*resampling_freq)  # ハミング窓関数を使用
         windowed_rri = target_rri * window
 
         freq_list = fftpack.fftfreq(len(target_rri), d=1/resampling_freq)
@@ -90,6 +90,7 @@ def fft(time_index, resampling_freq, resampling_rri, outputdir, timewidth):
         pidxs = np.where(freq_list > 0)
         freqs, power = freq_list[pidxs], np.abs(y_fft)[pidxs]
         freq = list(zip(freqs, power))
+
         LF = 0
         HF = 0
 
@@ -112,7 +113,7 @@ def fft(time_index, resampling_freq, resampling_rri, outputdir, timewidth):
 #############################################################################
 def wavelet(resampling_freq, resampling_rri, outputdir):    
     dt = 1/resampling_freq
-    tms = 0   #開始時間
+    tms = 0     #開始時間
     tme = len(resampling_rri)/resampling_freq   #終了時間
     tm = np.arange(tms, tme, dt)
 
@@ -132,7 +133,6 @@ def wavelet(resampling_freq, resampling_rri, outputdir):
     x = np.zeros(n_cwt)
     x[0:len(resampling_rri)] = resampling_rri[0:len(resampling_rri)] - np.mean(resampling_rri)
 
-    # omega array
     omega = 2.0*np.pi*np.fft.fftfreq(n_cwt, dt)
 
     # FFTを使って離散ウェーブレット変換する
@@ -161,9 +161,11 @@ def LFHFcalculator(cwtmatr, frequencies):
     # 指定の周波数帯域の行の番号
     LFcom = []
     HFcom = []
+
     # 特定の周波数帯域の行列
     LFfre = []
     HFfre = []
+    
     # 指定の周波数帯域のパワーの合計（時間ごと）
     LF = 0 
     HF = 0
